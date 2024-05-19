@@ -70,7 +70,21 @@ class PromptTemplate:
         return template
 
 
-def split_markdown(text):
+from typing import List, Dict, Union
+
+def split_markdown(text: str) -> List[Dict[str, Union[str, str]]]:
+    """
+    Splits a markdown text into chunks of text and code blocks.
+
+    Args:
+        text (str): The markdown text to split.
+
+    Returns:
+        List[Dict[str, Union[str, str]]]: A list of dictionaries, each representing a chunk of text or code block.
+            Each dictionary has two keys:
+                - "type" (str): The type of the chunk, either "text" or the language of the code block.
+                - "content" (str): The content of the chunk.
+    """
     # Regular expression to match markdown code blocks
     code_block_pattern = re.compile(
         rf"{TRIPLE_BACKTICKS}(\w+)?\n(.*?){TRIPLE_BACKTICKS}", re.DOTALL
