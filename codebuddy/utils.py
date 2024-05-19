@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 import subprocess
-from typing import List
+from typing import List, Dict, Union
 
 
 TRIPLE_BACKTICKS = "` ` `".replace(" ", "")
@@ -70,8 +70,6 @@ class PromptTemplate:
         return template
 
 
-from typing import List, Dict, Union
-
 def split_markdown(text: str) -> List[Dict[str, Union[str, str]]]:
     """
     Splits a markdown text into chunks of text and code blocks.
@@ -137,9 +135,9 @@ def filter_content(content: str, keywords: List[str]) -> str:
     return "\n".join(filtered_lines)
 
 
-from typing import List, Dict
-
-def process_chunks(chunks: List[Dict[str, str]], keywords: List[str]) -> List[Dict[str, str]]:
+def process_chunks(
+    chunks: List[Dict[str, str]], keywords: List[str]
+) -> List[Dict[str, str]]:
     """
     Processes and filters the chunks based on the specified criteria.
 
