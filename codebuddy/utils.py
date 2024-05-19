@@ -7,7 +7,16 @@ from typing import List
 TRIPLE_BACKTICKS = "` ` `".replace(" ", "")
 
 
-def run_bash(command_str):
+def run_bash(command_str: str) -> str:
+    """
+    Executes a bash command and returns its output.
+
+    Args:
+        command_str (str): The bash command to execute.
+
+    Returns:
+        str: The output of the bash command if successful, otherwise None.
+    """
     command_str = re.sub(r"pip(?! --no-input)", r"pip --no-input", command_str)
     try:
         result = subprocess.run(
