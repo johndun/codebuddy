@@ -118,16 +118,16 @@ def split_markdown(text: str) -> List[Dict[str, Union[str, str]]]:
     return chunks
 
 
-def filter_content(content, keywords):
+def filter_content(content: str, keywords: List[str]) -> str:
     """
     Filters lines in the content that start with any of the specified keywords.
 
-    Parameters:
-    content (str): The content to be filtered.
-    keywords (list of str): The keywords to filter by.
+    Args:
+        content (str): The content to be filtered.
+        keywords (List[str]): The keywords to filter by.
 
     Returns:
-    str: The filtered content with lines starting with one of the keywords.
+        str: The filtered content with lines starting with one of the keywords.
     """
     filtered_lines = [
         line
