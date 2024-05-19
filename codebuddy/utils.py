@@ -10,10 +10,13 @@ TRIPLE_BACKTICKS = "` ` `".replace(" ", "")
 def run_bash(command_str):
     command_str = re.sub(r'pip(?! --no-input)', r'pip --no-input', command_str)
     try:
-        return subprocess.run(
+        result = subprocess.run(
             command_str,
             shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-        ).stdout
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout
     except:
         return None
 
