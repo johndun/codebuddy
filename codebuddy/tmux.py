@@ -1,3 +1,4 @@
+import os
 import re
 import shlex
 import subprocess
@@ -36,7 +37,8 @@ class TmuxSession:
     content: str = ""
 
     def __post_init__(self):
-        base_path_path = str(Path(__file__).parent.parent)
+        self.project_path = os.path.expanduser(self.project_path).rstrip("/")
+        self.python_env = os.path.expanduser(self.python_env)
         run_bash(
             f"tmux kill-session -t {self.session_id} 2>/dev/null || true;"
             f"tmux new-session -s {self.session_id} -d;"
@@ -47,13 +49,12 @@ class TmuxSession:
             f'export PROJECT_PATH={self.project_path}',
             f'cd $PROJECT_PATH',
             f'export PYTHONPATH={self.project_path}',
-            f'export PATH={base_path_path}:$PATH',
             f'source {self.python_env}/bin/activate',
             f"echo '{self.prefix_break_token}'"
         ]
         self("\n".join(startup_commands), sleep_duration=0.1)
 
-    def __call__(self, command, sleep_duration=None, multiline=True):
+    def __call__(self, command, sleep_duration=None):
         sleep_duration = sleep_duration if sleep_duration is not None else self.sleep_duration
         # Escape single quotes in the command
         escaped_command = command.replace("'", r"'\''")

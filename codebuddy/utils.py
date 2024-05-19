@@ -8,6 +8,7 @@ TRIPLE_BACKTICKS = "` ` `".replace(" ", "")
 
 
 def run_bash(command_str):
+    command_str = re.sub(r'pip(?! --no-input)', r'pip --no-input', command_str)
     try:
         return subprocess.run(
             command_str,

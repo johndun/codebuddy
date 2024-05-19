@@ -42,6 +42,7 @@ class TmuxModule(OpenaiModule):
 
         self.project_path = os.path.expanduser(self.project_path).rstrip("/")
         self.python_env = os.path.expanduser(self.python_env)
+
         self._initialize_tmux_sessions()
 
     def _initialize_tmux_sessions(self):
