@@ -114,7 +114,7 @@ class TmuxModule(OpenaiModule):
         self.input_tokens.append(response.usage.prompt_tokens)
         self.output_tokens.append(response.usage.completion_tokens)
         response_content = response.choices[0].message.content
-        logger.info(response_content)
+        logger.debug(response_content)
         self.messages.append(Message("assistant", response_content))
 
         parser_content = ""
