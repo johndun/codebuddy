@@ -137,18 +137,19 @@ def filter_content(content: str, keywords: List[str]) -> str:
     return "\n".join(filtered_lines)
 
 
-def process_chunks(chunks, keywords):
+from typing import List, Dict
+
+def process_chunks(chunks: List[Dict[str, str]], keywords: List[str]) -> List[Dict[str, str]]:
     """
     Processes and filters the chunks based on the specified criteria.
 
-    Parameters:
-    chunks (list of dict): A list of dictionaries with fields "type" and "content".
-    keywords (list of str): A list of keywords to filter "content" in text-type chunks.
+    Args:
+        chunks (List[Dict[str, str]]): A list of dictionaries with fields "type" and "content".
+        keywords (List[str]): A list of keywords to filter "content" in text-type chunks.
 
     Returns:
-    list of dict: A filtered and processed list of chunks.
+        List[Dict[str, str]]: A filtered and processed list of chunks.
     """
-
     filtered_chunks = []
     for chunk in chunks:
         if chunk["type"] != "text":
