@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass
 
 import logging
-from pathlib import Path
 
 from codebuddy.utils import run_bash
 
@@ -46,16 +45,18 @@ class TmuxSession:
         )
         startup_commands = [
             f'export PS1="%c%  {self.prompt} "',
-            f'export PROJECT_PATH={self.project_path}',
-            f'cd $PROJECT_PATH',
-            f'export PYTHONPATH={self.project_path}',
-            f'source {self.python_env}/bin/activate',
-            f"echo '{self.prefix_break_token}'"
+            f"export PROJECT_PATH={self.project_path}",
+            f"cd $PROJECT_PATH",
+            f"export PYTHONPATH={self.project_path}",
+            f"source {self.python_env}/bin/activate",
+            f"echo '{self.prefix_break_token}'",
         ]
         self("\n".join(startup_commands), sleep_duration=0.1)
 
     def __call__(self, command, sleep_duration=None):
-        sleep_duration = sleep_duration if sleep_duration is not None else self.sleep_duration
+        sleep_duration = (
+            sleep_duration if sleep_duration is not None else self.sleep_duration
+        )
         # Escape single quotes in the command
         escaped_command = command.replace("'", r"'\''")
         for cmd in escaped_command.splitlines():
@@ -72,8 +73,10 @@ class TmuxSession:
         while not _check_command_complete(output, prompt=self.prompt):
             if sleep_duration:
                 time.sleep(sleep_duration)
-            subprocess.run(f"tmux capture-pane -t {self.session_id} -p > {buffer_file}", shell=True)
-            with open(buffer_file, 'r') as f:
+            subprocess.run(
+                f"tmux capture-pane -t {self.session_id} -p > {buffer_file}", shell=True
+            )
+            with open(buffer_file, "r") as f:
                 output = f.read().strip("\n")
         output = re.split(f"{self.prefix_break_token}", output)[-1].strip()
         if output.endswith(self.prompt):

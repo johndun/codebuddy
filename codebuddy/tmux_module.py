@@ -9,9 +9,17 @@ from openai import OpenAI
 
 from codebuddy.openai_module import OpenaiModule
 from codebuddy.tmux import TmuxSession
-from codebuddy.utils import PromptTemplate, run_bash, Message, split_markdown, process_chunks, TRIPLE_BACKTICKS
+from codebuddy.utils import (
+    PromptTemplate,
+    run_bash,
+    Message,
+    split_markdown,
+    process_chunks,
+    TRIPLE_BACKTICKS,
+)
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class TmuxModule(OpenaiModule):
@@ -24,7 +32,9 @@ class TmuxModule(OpenaiModule):
     prompt: str = "$"
     python_env: str = "/myenv"
     project_path: str = "/demo"
-    terminal_session_id: str = "terminal-session"  #: The tmux session id for the terminal
+    terminal_session_id: str = (
+        "terminal-session"  #: The tmux session id for the terminal
+    )
     python_session_id: str = "python-session"  #: The tmux session id for ipython
     terminal_session: TmuxSession = None
     python_session: TmuxSession = None
@@ -32,7 +42,7 @@ class TmuxModule(OpenaiModule):
     def __post_init__(self):
         assert self.project_path
         if self.config_path:
-            with open(self.config_path, 'r') as file:
+            with open(self.config_path, "r") as file:
                 module_data = yaml.safe_load(file)
             for field_name, value in module_data.items():
                 setattr(self, field_name, value)
@@ -53,10 +63,14 @@ class TmuxModule(OpenaiModule):
             "prefix_break_token": self.prefix_break_token,
             "prompt": self.prompt,
             "python_env": self.python_env,
-            "project_path": self.project_path
+            "project_path": self.project_path,
         }
-        self.terminal_session = TmuxSession(session_id=self.terminal_session_id, **session_args)
-        self.python_session = TmuxSession(session_id=self.python_session_id, **session_args)
+        self.terminal_session = TmuxSession(
+            session_id=self.terminal_session_id, **session_args
+        )
+        self.python_session = TmuxSession(
+            session_id=self.python_session_id, **session_args
+        )
         self.python_session.prompt = ">>>"
         for cmd in ("python", f"print('{self.prefix_break_token}')"):
             self.python_session(cmd)
@@ -71,9 +85,7 @@ class TmuxModule(OpenaiModule):
         return project_tree
 
     def _update_prompt(self):
-        self.instruction = self.prompt_template.format(
-            project=self.project_tree
-        )
+        self.instruction = self.prompt_template.format(project=self.project_tree)
 
     @property
     def functions(self):
@@ -83,8 +95,7 @@ class TmuxModule(OpenaiModule):
         pattern = "|".join(self.functions)
         file_path = re.sub(f"({pattern}) ", "", text)
         file_path = (
-            file_path
-            .replace("$PROJECT_PATH", self.project_path)
+            file_path.replace("$PROJECT_PATH", self.project_path)
             .replace("`", "")
             .replace("'", "")
             .replace('"', "")
@@ -121,17 +132,28 @@ class TmuxModule(OpenaiModule):
         chunk_idx = 0
         chunks = process_chunks(split_markdown(response_content), self.functions)
         while chunk_idx < len(chunks):
-            chunk_type, content = chunks[chunk_idx]["type"], chunks[chunk_idx]["content"]
+            chunk_type, content = (
+                chunks[chunk_idx]["type"],
+                chunks[chunk_idx]["content"],
+            )
 
             if chunk_type == "terminal":
                 old_terminal = self.terminal_session.content
                 terminal = self.terminal_session(content)
-                parser_content += f"\n{TRIPLE_BACKTICKS}\n" + terminal[len(old_terminal):].strip("\n") + f"\n{TRIPLE_BACKTICKS}\n"
+                parser_content += (
+                    f"\n{TRIPLE_BACKTICKS}\n"
+                    + terminal[len(old_terminal) :].strip("\n")
+                    + f"\n{TRIPLE_BACKTICKS}\n"
+                )
 
             elif chunk_type == "ipython":
                 old_python = self.python_session.content
                 python = self.python_session(content + "\n")
-                parser_content += f"\n{TRIPLE_BACKTICKS}\n" + python[len(old_python):].strip("\n") + f"\n{TRIPLE_BACKTICKS}\n"
+                parser_content += (
+                    f"\n{TRIPLE_BACKTICKS}\n"
+                    + python[len(old_python) :].strip("\n")
+                    + f"\n{TRIPLE_BACKTICKS}\n"
+                )
 
             elif chunk_type == "text" and content.startswith("OVERWRITE"):
                 file_path = self._get_file_path(content)
@@ -140,7 +162,9 @@ class TmuxModule(OpenaiModule):
                     break
                 with open(file_path, "w") as file:
                     file.write(chunks[chunk_idx + 1]["content"])
-                parser_content += f"\nContents of {file_path} successfully overwritten.\n"
+                parser_content += (
+                    f"\nContents of {file_path} successfully overwritten.\n"
+                )
                 chunk_idx += 1
 
             elif chunk_type == "text" and content.startswith("APPEND"):
@@ -180,7 +204,9 @@ class TmuxModule(OpenaiModule):
                 old_content = chunks[chunk_idx + 1]["content"]
                 new_content = chunks[chunk_idx + 2]["content"]
                 if old_content not in file_contents:
-                    parser_content += f"\nContent to replace     not found in {file_path}.\n"
+                    parser_content += (
+                        f"\nContent to replace     not found in {file_path}.\n"
+                    )
                     break
                 file_contents = file_contents.replace(old_content, new_content)
                 with open(file_path, "w") as file:

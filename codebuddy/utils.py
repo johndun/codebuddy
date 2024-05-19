@@ -8,11 +8,14 @@ TRIPLE_BACKTICKS = "` ` `".replace(" ", "")
 
 
 def run_bash(command_str):
-    command_str = re.sub(r'pip(?! --no-input)', r'pip --no-input', command_str)
+    command_str = re.sub(r"pip(?! --no-input)", r"pip --no-input", command_str)
     try:
         result = subprocess.run(
             command_str,
-            shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
         if result.returncode != 0:
             return None
@@ -24,6 +27,7 @@ def run_bash(command_str):
 @dataclass
 class Message:
     """A message in a dialog."""
+
     role: str  #: The role of the message sender
     content: str  #: The content of the message
 
@@ -34,6 +38,7 @@ class Message:
 @dataclass
 class Dialog:
     """A dialog consisting of a list of messages."""
+
     turns: List[Message]  #: A list of messages in the dialog
 
     def __repr__(self):
@@ -43,6 +48,7 @@ class Dialog:
 @dataclass
 class PromptTemplate:
     """A string prompt template with keys marked by double curly braces."""
+
     template: str  #: The prompt template string or list of strings
 
     def format(self, **kwargs) -> str:
@@ -57,7 +63,9 @@ class PromptTemplate:
 
 def split_markdown(text):
     # Regular expression to match markdown code blocks
-    code_block_pattern = re.compile(rf'{TRIPLE_BACKTICKS}(\w+)?\n(.*?){TRIPLE_BACKTICKS}', re.DOTALL)
+    code_block_pattern = re.compile(
+        rf"{TRIPLE_BACKTICKS}(\w+)?\n(.*?){TRIPLE_BACKTICKS}", re.DOTALL
+    )
 
     chunks = []
     last_index = 0
@@ -66,27 +74,23 @@ def split_markdown(text):
     for match in code_block_pattern.finditer(text):
         # Add the text before the code block
         if last_index < match.start():
-            chunks.append({
-                "type": "text",
-                "content": text[last_index:match.start()]  # .strip()
-            })
+            chunks.append(
+                {
+                    "type": "text",
+                    "content": text[last_index : match.start()],  # .strip()
+                }
+            )
 
         # Add the code block
         language = match.group(1) if match.group(1) else "code"
         code_content = match.group(2)
-        chunks.append({
-            "type": language,
-            "content": code_content
-        })
+        chunks.append({"type": language, "content": code_content})
 
         last_index = match.end()
 
     # Add the remaining text after the last code block
     if last_index < len(text):
-        chunks.append({
-            "type": "text",
-            "content": text[last_index:].strip()
-        })
+        chunks.append({"type": "text", "content": text[last_index:].strip()})
     chunks = [x for x in chunks if x["content"]]
     return chunks
 
@@ -102,8 +106,12 @@ def filter_content(content, keywords):
     Returns:
     str: The filtered content with lines starting with one of the keywords.
     """
-    filtered_lines = [line for line in content.splitlines() if any(line.startswith(keyword) for keyword in keywords)]
-    return '\n'.join(filtered_lines)
+    filtered_lines = [
+        line
+        for line in content.splitlines()
+        if any(line.startswith(keyword) for keyword in keywords)
+    ]
+    return "\n".join(filtered_lines)
 
 
 def process_chunks(chunks, keywords):
@@ -120,14 +128,13 @@ def process_chunks(chunks, keywords):
 
     filtered_chunks = []
     for chunk in chunks:
-        if chunk['type'] != "text":
+        if chunk["type"] != "text":
             filtered_chunks.append(chunk)
         else:
-            filtered_content = filter_content(chunk['content'], keywords)
+            filtered_content = filter_content(chunk["content"], keywords)
             if filtered_content:
-                filtered_chunks.append({
-                    'type': chunk['type'],
-                    'content': filtered_content
-                })
+                filtered_chunks.append(
+                    {"type": chunk["type"], "content": filtered_content}
+                )
 
     return filtered_chunks
