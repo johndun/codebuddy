@@ -41,6 +41,7 @@ class TmuxModule(OpenaiModule):
     def __post_init__(self):
         assert self.project_path
         if self.config_path:
+            self.config_path = os.path.expanduser(self.config_path)
             with open(self.config_path, "r") as file:
                 module_data = yaml.safe_load(file)
             for field_name, value in module_data.items():
@@ -78,7 +79,7 @@ class TmuxModule(OpenaiModule):
     @property
     def project_tree(self):
         """Run tree on the project."""
-        cmd_str = f'tree -I "*.pyc|__pycache__" {self.project_path}'
+        cmd_str = f'tree -I "*.pyc|__pycache__|venv|codebuddy-venv|.env" {self.project_path}'
         project_tree = run_bash(cmd_str).strip()
         project_tree = project_tree.splitlines()
         if len(project_tree) > 1:
