@@ -241,6 +241,7 @@ class ChatbotLauncher(Script):
         metadata={"help": "Path to the Python environment."}
     )
     project_path: str = field(default="~/demo", metadata={"help": "Path to the project directory."})
+    share: bool = field(default=False, metadata={"help": "If True, launches public gradio."})
 
     def __post_init__(self):
         self.project_path = os.path.expanduser(self.project_path).rstrip("/")
@@ -261,7 +262,7 @@ class ChatbotLauncher(Script):
             project_path=self.project_path
         )
         gui = module.get_gradio_interface(retry_btn=None, undo_btn=None)
-        gui.launch(share=False)
+        gui.launch(share=self.share)
 
 
 if __name__ == "__main__":
