@@ -5,8 +5,8 @@ from typing import List
 import yaml
 from openai import OpenAI
 
-from codebuddy.utils import Dialog
-from codebuddy.utils import Message
+from codebuddy.script import Script
+from codebuddy.utils import Dialog, Message
 
 
 import logging
@@ -117,7 +117,9 @@ class OpenaiModule(OpenaiCompletionArgs):
             self.messages = messages
         if clear:
             self.clear()
-        return self.forward(msg)
+        for chunk in self.forward(msg):
+            yield chunk
+        logger.info(f"Total tokens: {self.tokens}")
 
     def get_gradio_interface(self, **kwargs):
         """Return a gradio chat interface."""
@@ -128,12 +130,13 @@ class OpenaiModule(OpenaiCompletionArgs):
             for human, assistant in history:
                 messages.append(Message("user", human))
                 messages.append(Message("assistant", assistant))
-            yield self(message, messages=messages)
+            for chunk in self(message, messages=messages):
+                yield chunk
 
         return gr.ChatInterface(
             predict,
             analytics_enabled=False,
-            chatbot=gr.Chatbot(label=self.name, height=600),
+            chatbot=gr.Chatbot(label=self.name, height=500),
             **kwargs
         )
 
@@ -160,4 +163,25 @@ class OpenaiModule(OpenaiCompletionArgs):
         self.output_tokens.append(response.usage.completion_tokens)
         response_content = response.choices[0].message.content
         self.messages.append(Message("assistant", response_content))
-        return response_content
+        yield response_content
+
+
+@dataclass
+class ChatbotLauncher(Script):
+    """Launch a OpenAI chatbot gradio gui."""
+    prompt_name: str = field(default="omni", metadata={"help": "The name of the prompt config yaml file."})
+
+    def run(self):
+        prompt_basepath = os.path.dirname(os.path.dirname(__file__))
+        prompt_path = os.path.join(prompt_basepath, "prompts", self.prompt_name + ".yaml")
+        module = OpenaiModule(config_path=prompt_path)
+        gui = module.get_gradio_interface()
+        gui.launch(share=False)
+
+
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+
+    logging.basicConfig(level=logging.INFO)
+    load_dotenv()
+    ChatbotLauncher.parse_args().run()

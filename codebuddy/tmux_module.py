@@ -1,12 +1,13 @@
 import os
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Union
 
 import yaml
 import logging
 from openai import OpenAI
 
+from codebuddy.script import Script
 from codebuddy.openai_module import OpenaiModule
 from codebuddy.tmux import TmuxSession
 from codebuddy.utils import (
@@ -24,18 +25,16 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TmuxModule(OpenaiModule):
     prompt_template: Union[str, PromptTemplate] = ""  #: The prompt template
-    max_calls: int = 20  #: Maximum number of LLM API calls
-    session_height: int = 8192
-    session_width: int = 256
-    sleep_duration: int = 1
-    prefix_break_token: str = "TMUX_BREAK"
-    prompt: str = "$"
-    python_env: str = "/myenv"
-    project_path: str = "/demo"
-    terminal_session_id: str = (
-        "terminal-session"  #: The tmux session id for the terminal
-    )
-    python_session_id: str = "python-session"  #: The tmux session id for ipython
+    max_calls: int = 5  #: Maximum number of LLM API calls
+    python_env: str = "~/myenv"  #: Path to the Python environment
+    project_path: str = "~/demo"  #: Path to the project directory
+    sleep_duration: int = 1  #: Maximum number of LLM API calls.
+    prefix_break_token: str = "TMUX_BREAK"  #: Maximum number of LLM API calls.
+    prompt: str = "$"  #: The command prompt string.
+    session_height: int = 8192  #: Number of lines for the tmux history
+    session_width: int = 256  #: Width of the tmux history
+    terminal_session_id: str = "terminal-session"  #: tmux terminal session name
+    python_session_id: str = "python-session"  #: tmux python session name
     terminal_session: TmuxSession = None
     python_session: TmuxSession = None
 
@@ -56,6 +55,7 @@ class TmuxModule(OpenaiModule):
         self._initialize_tmux_sessions()
 
     def _initialize_tmux_sessions(self):
+        """Initializes the tmux sessions."""
         session_args = {
             "session_width": self.session_width,
             "session_height": self.session_height,
@@ -77,6 +77,7 @@ class TmuxModule(OpenaiModule):
 
     @property
     def project_tree(self):
+        """Run tree on the project."""
         cmd_str = f'tree -I "*.pyc|__pycache__" {self.project_path}'
         project_tree = run_bash(cmd_str).strip()
         project_tree = project_tree.splitlines()
@@ -85,13 +86,16 @@ class TmuxModule(OpenaiModule):
         return project_tree
 
     def _update_prompt(self):
+        """Update the prompt with current project tree."""
         self.instruction = self.prompt_template.format(project=self.project_tree)
 
     @property
     def functions(self):
+        """File editing functions."""
         return ["OVERWRITE", "DELETE", "APPEND", "REPLACE"]
 
     def _get_file_path(self, text):
+        """Returns a cleaned file path from a function call."""
         pattern = "|".join(self.functions)
         file_path = re.sub(f"({pattern}) ", "", text)
         file_path = (
@@ -156,6 +160,7 @@ class TmuxModule(OpenaiModule):
                 )
 
             elif chunk_type == "text" and content.startswith("OVERWRITE"):
+                logger.info("OVERWRITE workflow")
                 file_path = self._get_file_path(content)
                 if not os.path.exists(file_path):
                     parser_content += f"\nFile {file_path} does not exist.\n"
@@ -168,6 +173,7 @@ class TmuxModule(OpenaiModule):
                 chunk_idx += 1
 
             elif chunk_type == "text" and content.startswith("APPEND"):
+                logger.info("APPEND workflow")
                 file_path = self._get_file_path(content)
                 if not os.path.exists(file_path):
                     parser_content += f"\nFile {file_path} does not exist.\n"
@@ -178,6 +184,7 @@ class TmuxModule(OpenaiModule):
                 chunk_idx += 1
 
             elif chunk_type == "text" and content.startswith("DELETE"):
+                logger.info("DELETE workflow")
                 file_path = self._get_file_path(content)
                 if not os.path.exists(file_path):
                     parser_content += f"\nFile {file_path} does not exist.\n"
@@ -195,6 +202,7 @@ class TmuxModule(OpenaiModule):
                 chunk_idx += 1
 
             elif chunk_type == "text" and content.startswith("REPLACE"):
+                logger.info("REPLACE workflow")
                 file_path = self._get_file_path(content)
                 if not os.path.exists(file_path):
                     parser_content += f"\nFile {file_path} does not exist.\n"
@@ -205,7 +213,7 @@ class TmuxModule(OpenaiModule):
                 new_content = chunks[chunk_idx + 2]["content"]
                 if old_content not in file_contents:
                     parser_content += (
-                        f"\nContent to replace     not found in {file_path}.\n"
+                        f"\nContent to replace not found in {file_path}.\n"
                     )
                     break
                 file_contents = file_contents.replace(old_content, new_content)
@@ -217,6 +225,45 @@ class TmuxModule(OpenaiModule):
             chunk_idx += 1
 
         if parser_content:
-            return self.forward(parser_content.strip(), depth + 1)
+            for chunk in self.forward(parser_content.strip(), depth + 1):
+                yield chunk
         else:
-            return response_content
+            yield response_content
+
+
+@dataclass
+class ChatbotLauncher(Script):
+    """Launch a tmux module gradio gui."""
+    prompt_name: str = field(default="codebuddy-openai", metadata={"help": "The name of the prompt config yaml file."})
+    max_calls: int = field(default=5, metadata={"help": "Maximum number of LLM API calls."})
+    python_env: str = field(default="~/myenv", metadata={"help": "Path to the Python environment."})
+    project_path: str = field(default="~/demo", metadata={"help": "Path to the project directory."})
+
+    def __post_init__(self):
+        self.project_path = os.path.expanduser(self.project_path).rstrip("/")
+        self.python_env = os.path.expanduser(self.python_env)
+        if not os.path.exists(self.project_path):
+            raise NotADirectoryError(f"Project path {self.project_path} does not exist.")
+        if not os.path.exists(self.python_env):
+            raise NotADirectoryError(f"Python env {self.python_env} does not exist.")
+
+    def run(self):
+        prompt_basepath = os.path.dirname(os.path.dirname(__file__))
+
+        prompt_path = os.path.join(prompt_basepath, "prompts", self.prompt_name + ".yaml")
+        module = TmuxModule(
+            config_path=prompt_path,
+            max_calls=self.max_calls,
+            python_env=self.python_env,
+            project_path=self.project_path
+        )
+        gui = module.get_gradio_interface(retry_btn=None, undo_btn=None)
+        gui.launch(share=False)
+
+
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+
+    logging.basicConfig(level=logging.INFO)
+    load_dotenv()
+    ChatbotLauncher.parse_args().run()

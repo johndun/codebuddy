@@ -35,3 +35,12 @@ git config --global core.pager cat
 We also make use of a python `venv` virtual environment.
 
 You will need to make your OpenAI API key available in the `OPENAI_API_KEY` environment variable. I've been using a `.env` file along with the `dotenv` package. You can install it with `pip install python-dotenv`. 
+
+
+## Usage
+
+Run in local gradio:
+
+```shell
+python codebuddy/tmux_module.py --python_env path/to/env --project_path path/to/project
+```
