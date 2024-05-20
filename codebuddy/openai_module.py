@@ -122,23 +122,42 @@ class OpenaiModule(OpenaiCompletionArgs):
         logger.info(f"Total tokens: {self.tokens}")
 
     def get_gradio_interface(self, **kwargs):
-        """Return a gradio chat interface."""
+        """Returns a gradio chat interface."""
         import gradio as gr
 
-        def predict(message, history):
+        def predict(history):
             messages = []
-            for human, assistant in history:
+            history[-1][1] = ""
+            for human, assistant in history[:-1]:
                 messages.append(Message("user", human))
                 messages.append(Message("assistant", assistant))
-            for chunk in self(message, messages=messages):
-                yield chunk
+            for chunk in self(history[-1][0], messages=messages):
+                history[-1][1] = chunk
+                yield history
 
-        return gr.ChatInterface(
-            predict,
-            analytics_enabled=False,
-            chatbot=gr.Chatbot(label=self.name, height=500),
-            **kwargs
-        )
+        def user(user_message, history):
+            return "", history + [[user_message, None]]
+
+        with gr.Blocks(analytics_enabled=False, **kwargs) as gui:
+            chat = gr.Chatbot(label=self.name, height=500)
+            with gr.Row():
+                clear = gr.Button("Clear", variant="secondary", size="sm", min_width=60)
+            with gr.Row():
+                msg = gr.Textbox(
+                    container=False,
+                    show_label=False,
+                    label="Message",
+                    placeholder="Type a message...",
+                    scale=7,
+                    autofocus=True,
+                )
+                submit = gr.Button("Submit", variant="primary", scale=1, min_width=150)
+
+            msg.submit(user, [msg, chat], [msg, chat], queue=False).then(predict, chat, chat)
+            submit.click(user, [msg, chat], [msg, chat], queue=False).then(predict, chat, chat)
+            clear.click(lambda: None, None, chat, queue=False)
+
+        return gui
 
     def forward(self, message: str = "", depth: int = 0) -> str:
         """Generate a response to a user message."""

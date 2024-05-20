@@ -110,17 +110,15 @@ class TmuxModule(OpenaiModule):
         """Generate a response to a user message."""
         self._update_prompt()
         logger.debug("Calling LLM")
-        messages = self.messages
-        messages.append(Message("user", message))
-        if self.instruction:
-            messages.insert(0, Message("system", self.instruction))
+        self.messages.append(Message("user", message))
 
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         request = self.completion_args
-        request["messages"] = [asdict(x) for x in messages]
+        messages = [asdict(x) for x in self.messages]
+
+        request["messages"] = [{"role": "system", "content": self.instruction}] + messages
 
         try:
-            logger.debug(request)
             response = client.chat.completions.create(**request)
             logger.debug(response)
         except Exception as ex:
@@ -129,17 +127,14 @@ class TmuxModule(OpenaiModule):
         self.input_tokens.append(response.usage.prompt_tokens)
         self.output_tokens.append(response.usage.completion_tokens)
         response_content = response.choices[0].message.content
-        logger.debug(response_content)
         self.messages.append(Message("assistant", response_content))
+        messages.append({"role": "assistant", "content": response_content})
 
         parser_content = ""
         chunk_idx = 0
         chunks = process_chunks(split_markdown(response_content), self.functions)
         while chunk_idx < len(chunks):
-            chunk_type, content = (
-                chunks[chunk_idx]["type"],
-                chunks[chunk_idx]["content"],
-            )
+            chunk_type, content = chunks[chunk_idx]["type"], chunks[chunk_idx]["content"],
 
             if chunk_type == "terminal":
                 old_terminal = self.terminal_session.content
@@ -149,6 +144,7 @@ class TmuxModule(OpenaiModule):
                     + terminal[len(old_terminal) :].strip("\n")
                     + f"\n{TRIPLE_BACKTICKS}\n"
                 )
+                yield messages + [{"role": "user", "content": parser_content.strip()}]
 
             elif chunk_type == "ipython":
                 old_python = self.python_session.content
@@ -158,18 +154,21 @@ class TmuxModule(OpenaiModule):
                     + python[len(old_python) :].strip("\n")
                     + f"\n{TRIPLE_BACKTICKS}\n"
                 )
+                yield messages + [{"role": "user", "content": parser_content.strip()}]
 
             elif chunk_type == "text" and content.startswith("OVERWRITE"):
                 logger.info("OVERWRITE workflow")
                 file_path = self._get_file_path(content)
                 if not os.path.exists(file_path):
                     parser_content += f"\nFile {file_path} does not exist.\n"
+                    yield messages + [{"role": "user", "content": parser_content.strip()}]
                     break
                 with open(file_path, "w") as file:
                     file.write(chunks[chunk_idx + 1]["content"])
                 parser_content += (
                     f"\nContents of {file_path} successfully overwritten.\n"
                 )
+                yield messages + [{"role": "user", "content": parser_content.strip()}]
                 chunk_idx += 1
 
             elif chunk_type == "text" and content.startswith("APPEND"):
@@ -177,10 +176,12 @@ class TmuxModule(OpenaiModule):
                 file_path = self._get_file_path(content)
                 if not os.path.exists(file_path):
                     parser_content += f"\nFile {file_path} does not exist.\n"
+                    yield messages + [{"role": "user", "content": parser_content.strip()}]
                     break
                 with open(file_path, "a") as file:
                     file.write("\n" + chunks[chunk_idx + 1]["content"])
                 parser_content += f"\nContents successfully append to {file_path}.\n"
+                yield messages + [{"role": "user", "content": parser_content.strip()}]
                 chunk_idx += 1
 
             elif chunk_type == "text" and content.startswith("DELETE"):
@@ -188,17 +189,20 @@ class TmuxModule(OpenaiModule):
                 file_path = self._get_file_path(content)
                 if not os.path.exists(file_path):
                     parser_content += f"\nFile {file_path} does not exist.\n"
+                    yield messages + [{"role": "user", "content": parser_content.strip()}]
                     break
                 with open(file_path, "r") as file:
                     file_contents = file.read()
                 delete_content = chunks[chunk_idx + 1]["content"]
                 if delete_content not in file_contents:
                     parser_content += f"\nContent to delete not found in {file_path}.\n"
+                    yield messages + [{"role": "user", "content": parser_content.strip()}]
                     break
                 file_contents = file_contents.replace(delete_content, "")
                 with open(file_path, "w") as file:
                     file.write(file_contents)
                 parser_content += f"\nContents successfully deleted from {file_path}.\n"
+                yield messages + [{"role": "user", "content": parser_content.strip()}]
                 chunk_idx += 1
 
             elif chunk_type == "text" and content.startswith("REPLACE"):
@@ -206,29 +210,75 @@ class TmuxModule(OpenaiModule):
                 file_path = self._get_file_path(content)
                 if not os.path.exists(file_path):
                     parser_content += f"\nFile {file_path} does not exist.\n"
+                    yield messages + [{"role": "user", "content": parser_content.strip()}]
                     break
                 with open(file_path, "r") as file:
                     file_contents = file.read()
                 old_content = chunks[chunk_idx + 1]["content"]
                 new_content = chunks[chunk_idx + 2]["content"]
                 if old_content not in file_contents:
-                    parser_content += (
-                        f"\nContent to replace not found in {file_path}.\n"
-                    )
+                    parser_content += f"\nContent to replace not found in {file_path}.\n"
+                    yield messages + [{"role": "user", "content": parser_content.strip()}]
                     break
                 file_contents = file_contents.replace(old_content, new_content)
                 with open(file_path, "w") as file:
                     file.write(file_contents)
                 parser_content += f"\nContents successfully replaced in {file_path}.\n"
+                yield messages + [{"role": "user", "content": parser_content.strip()}]
                 chunk_idx += 2
 
             chunk_idx += 1
 
+        parser_content = parser_content.strip()
         if parser_content:
-            for chunk in self.forward(parser_content.strip(), depth + 1):
+            yield messages + [{"role": "user", "content": parser_content}]
+            for chunk in self.forward(parser_content, depth + 1):
                 yield chunk
         else:
-            yield response_content
+            yield messages
+
+    def get_gradio_interface(self, **kwargs):
+        """Returns a gradio chat interface."""
+        import gradio as gr
+
+        def predict(history):
+            messages = []
+            history[-1][1] = ""
+            for human, assistant in history[:-1]:
+                messages.append(Message("user", human))
+                messages.append(Message("assistant", assistant))
+            for chunk in self(history[-1][0], messages=messages):
+                new_hist = []
+                for idx in range(0, len(chunk), 2):
+                    if idx + 1 < len(chunk):
+                        new_hist.append((chunk[idx]["content"], chunk[idx + 1]["content"]))
+                    else:
+                        new_hist.append((chunk[idx]["content"], None))
+                yield new_hist
+
+        def user(user_message, history):
+            return "", history + [[user_message, None]]
+
+        with gr.Blocks(analytics_enabled=False, **kwargs) as gui:
+            chat = gr.Chatbot(label=self.name, height=500)
+            with gr.Row():
+                clear = gr.Button("Clear", variant="secondary", size="sm", min_width=60)
+            with gr.Row():
+                msg = gr.Textbox(
+                    container=False,
+                    show_label=False,
+                    label="Message",
+                    placeholder="Type a message...",
+                    scale=7,
+                    autofocus=True,
+                )
+                submit = gr.Button("Submit", variant="primary", scale=1, min_width=150)
+
+            msg.submit(user, [msg, chat], [msg, chat], queue=False).then(predict, chat, chat)
+            submit.click(user, [msg, chat], [msg, chat], queue=False).then(predict, chat, chat)
+            clear.click(lambda: None, None, chat, queue=False)
+
+        return gui
 
 
 @dataclass
@@ -261,7 +311,7 @@ class ChatbotLauncher(Script):
             python_env=self.python_env,
             project_path=self.project_path
         )
-        gui = module.get_gradio_interface(retry_btn=None, undo_btn=None)
+        gui = module.get_gradio_interface()
         gui.launch(share=self.share)
 
 
