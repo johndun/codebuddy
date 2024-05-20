@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class TmuxModule(OpenaiModule):
     prompt_template: Union[str, PromptTemplate] = ""  #: The prompt template
     max_calls: int = 5  #: Maximum number of LLM API calls
-    python_env: str = "~/myenv"  #: Path to the Python environment
+    python_env: str = os.path.dirname(os.path.dirname(__file__)) + "/codebuddy-venv"  #: Path to the Python environment
     project_path: str = "~/demo"  #: Path to the project directory
     sleep_duration: int = 1  #: Maximum number of LLM API calls.
     prefix_break_token: str = "TMUX_BREAK"  #: Maximum number of LLM API calls.
@@ -236,7 +236,10 @@ class ChatbotLauncher(Script):
     """Launch a tmux module gradio gui."""
     prompt_name: str = field(default="codebuddy-openai", metadata={"help": "The name of the prompt config yaml file."})
     max_calls: int = field(default=5, metadata={"help": "Maximum number of LLM API calls."})
-    python_env: str = field(default="~/myenv", metadata={"help": "Path to the Python environment."})
+    python_env: str = field(
+        default=os.path.dirname(os.path.dirname(__file__)) + "/codebuddy-venv",
+        metadata={"help": "Path to the Python environment."}
+    )
     project_path: str = field(default="~/demo", metadata={"help": "Path to the project directory."})
 
     def __post_init__(self):
