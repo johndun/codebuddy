@@ -50,3 +50,7 @@ Run in local gradio:
 ```shell
 python codebuddy/tmux_module.py --project_path path/to/project
 ```
+
+## Notes and Troubleshooting
+
+If you run into errors launching gradio from within tmux, you may need to unset the $TMUX environment variable to allow for nested tmux sessions.
