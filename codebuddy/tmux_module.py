@@ -5,11 +5,12 @@ from typing import Union
 
 import yaml
 import logging
-from openai import OpenAI
 
-from codebuddy.script import Script
-from codebuddy.openai_module import OpenaiModule
+from codebuddy.openai_backend import OpenaiBackend
+from codebuddy.bedrock_backend import BedrockBackend
 from codebuddy.tmux import TmuxSession
+from codebuddy.script import Script
+from codebuddy.chat_module import ChatModule
 from codebuddy.utils import (
     PromptTemplate,
     run_bash,
@@ -19,11 +20,13 @@ from codebuddy.utils import (
     TRIPLE_BACKTICKS,
 )
 
+
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class TmuxModule(OpenaiModule):
+class TmuxModule(ChatModule):
+    """A module that leverages a tmux session to execute code locally."""
     prompt_template: Union[str, PromptTemplate] = ""  #: The prompt template
     max_calls: int = 5  #: Maximum number of LLM API calls
     python_env: str = os.path.dirname(os.path.dirname(__file__)) + "/codebuddy-venv"  #: Path to the Python environment
@@ -117,25 +120,10 @@ class TmuxModule(OpenaiModule):
 
         logger.debug("Calling LLM")
         self.messages.append(Message("user", message))
-
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        request = self.completion_args
-        messages = [asdict(x) for x in self.messages]
-
-        request["messages"] = [{"role": "system", "content": self.instruction}] + messages
-
-        try:
-            response = client.chat.completions.create(**request)
-            logger.debug(response)
-        except Exception as ex:
-            raise ex
-
-        self.input_tokens.append(response.usage.prompt_tokens)
-        self.output_tokens.append(response.usage.completion_tokens)
-        response_content = response.choices[0].message.content
+        response_content = self.call_api([Message("system", self.instruction)] + self.messages)
         self.messages.append(Message("assistant", response_content))
-        messages.append({"role": "assistant", "content": response_content})
 
+        messages = [asdict(msg) for msg in self.messages]
         parser_content = ""
         chunk_idx = 0
         chunks = process_chunks(split_markdown(response_content), self.functions)
@@ -145,21 +133,13 @@ class TmuxModule(OpenaiModule):
             if chunk_type == "terminal":
                 old_terminal = self.terminal_session.content
                 terminal = self.terminal_session(content)
-                parser_content += (
-                    f"\n{TRIPLE_BACKTICKS}\n"
-                    + terminal[len(old_terminal) :].strip("\n")
-                    + f"\n{TRIPLE_BACKTICKS}\n"
-                )
+                parser_content += f"\n{TRIPLE_BACKTICKS}\n" + terminal[len(old_terminal) :].strip("\n") + f"\n{TRIPLE_BACKTICKS}\n"
                 yield messages + [{"role": "user", "content": parser_content.strip()}]
 
             elif chunk_type == "ipython":
                 old_python = self.python_session.content
                 python = self.python_session(content + "\n")
-                parser_content += (
-                    f"\n{TRIPLE_BACKTICKS}\n"
-                    + python[len(old_python) :].strip("\n")
-                    + f"\n{TRIPLE_BACKTICKS}\n"
-                )
+                parser_content += f"\n{TRIPLE_BACKTICKS}\n" + python[len(old_python) :].strip("\n") + f"\n{TRIPLE_BACKTICKS}\n"
                 yield messages + [{"role": "user", "content": parser_content.strip()}]
 
             elif chunk_type == "text" and content.startswith("OVERWRITE"):
@@ -171,9 +151,7 @@ class TmuxModule(OpenaiModule):
                     break
                 with open(file_path, "w") as file:
                     file.write(chunks[chunk_idx + 1]["content"])
-                parser_content += (
-                    f"\nContents of {file_path} successfully overwritten.\n"
-                )
+                parser_content += f"\nContents of {file_path} successfully overwritten.\n"
                 yield messages + [{"role": "user", "content": parser_content.strip()}]
                 chunk_idx += 1
 
@@ -287,10 +265,28 @@ class TmuxModule(OpenaiModule):
         return gui
 
 
+class OpenaiTmuxModule(TmuxModule, OpenaiBackend):
+    """A tmux module using OpenaiBackend."""
+
+
 @dataclass
-class ChatbotLauncher(Script):
+class BedrockTmuxModule(TmuxModule, BedrockBackend):
+    """A tmux module using BedrockBackend."""
+
+
+TMUX_MODULES = {
+    "openai": OpenaiTmuxModule,
+    "bedrock": BedrockTmuxModule
+}
+
+
+@dataclass
+class TmuxAgentLauncher(Script):
     """Launch a tmux module gradio gui."""
-    prompt_name: str = field(default="codebuddy-openai", metadata={"help": "The name of the prompt config yaml file."})
+    backend: str = field(default="openai", metadata={"help": "Backend name"})
+    prompt_name: str = field(
+        default="codebuddy-openai", metadata={"help": "The name of the prompt config yaml file."}
+    )
     max_calls: int = field(default=5, metadata={"help": "Maximum number of LLM API calls."})
     python_env: str = field(
         default=os.path.dirname(os.path.dirname(__file__)) + "/codebuddy-venv",
@@ -309,16 +305,15 @@ class ChatbotLauncher(Script):
 
     def run(self):
         prompt_basepath = os.path.dirname(os.path.dirname(__file__))
-
         prompt_path = os.path.join(prompt_basepath, "prompts", self.prompt_name + ".yaml")
-        module = TmuxModule(
+        module = TMUX_MODULES[self.backend](
             config_path=prompt_path,
             max_calls=self.max_calls,
             python_env=self.python_env,
             project_path=self.project_path
         )
         gui = module.get_gradio_interface()
-        gui.launch(share=self.share)
+        gui.launch(share=False)
 
 
 if __name__ == "__main__":
@@ -326,4 +321,4 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
     load_dotenv()
-    ChatbotLauncher.parse_args().run()
+    TmuxAgentLauncher.parse_args().run()
