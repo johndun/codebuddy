@@ -67,7 +67,8 @@ prompt_template: |
   Replacement lines
   ```
   
-  Note: content to be replaced must exactly match the contents in the file, including indentation.
+  Note: Content to be replaced must exactly match the contents in the file, including indentation.
+  Note: If you run into problems using REPLACE. Use `cat` to view the entire file and consider using OVERWRITE. 
   
   # Creating new files
   
@@ -91,3 +92,8 @@ prompt_template: |
   {{project}}
   </project_tree>
   ```
+
+  Follow these additional guidelines
+  
+  - Assume that all necessary python packages are already installed. Only install new packages when the user asks you to.
+  - NEVER push changes to a remote git repository. NEVER EVER EVER push changes to a remote git repository.

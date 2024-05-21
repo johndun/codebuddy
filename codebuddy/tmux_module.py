@@ -32,7 +32,7 @@ class TmuxModule(OpenaiModule):
     prefix_break_token: str = "TMUX_BREAK"  #: Maximum number of LLM API calls.
     prompt: str = "$"  #: The command prompt string.
     session_height: int = 8192  #: Number of lines for the tmux history
-    session_width: int = 256  #: Width of the tmux history
+    session_width: int = 128  #: Width of the tmux history
     terminal_session_id: str = "terminal-session"  #: tmux terminal session name
     python_session_id: str = "python-session"  #: tmux python session name
     terminal_session: TmuxSession = None
@@ -110,6 +110,11 @@ class TmuxModule(OpenaiModule):
     def forward(self, message: str = "", depth: int = 0) -> str:
         """Generate a response to a user message."""
         self._update_prompt()
+
+        if depth >= self.max_calls:
+            logger.info("The maximum number of LLM calls was reached. Exiting.")
+            return
+
         logger.debug("Calling LLM")
         self.messages.append(Message("user", message))
 
